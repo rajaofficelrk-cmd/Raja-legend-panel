@@ -1,151 +1,43 @@
 import os
 from urllib.parse import urlparse
 
-from flask import Flask, request, render_template_string, jsonify, redirect
+from flask import Flask, request, render_template_string, jsonify, redirect, make_response
 
 app = Flask(__name__)
 
-CSS = """
+CUTE_BG = "PASTE_CUTE_DP_IMAGE_URL_HERE"
+
+CSS = f"""
 <style>
-*{box-sizing:border-box}
-body{
+*{{box-sizing:border-box}}
+body{{
     margin:0;
-    background:linear-gradient(135deg,#00140a,#000000 55%,#001f11);
+    background:
+        linear-gradient(rgba(0,0,0,.72), rgba(0,0,0,.72)),
+        url("{CUTE_BG}");
+    background-size:cover;
+    background-position:center;
+    background-attachment:fixed;
     color:#00ff66;
     font-family:"Courier New",monospace;
-}
-.container{
-    width:100%;
-    max-width:720px;
-    margin:auto;
-    padding:18px 10px 50px;
-}
-.logo{
-    text-align:center;
-    font-family:Georgia,serif;
-    font-size:34px;
-    font-weight:bold;
-    color:#00ff66;
-    text-shadow:0 0 6px #00ff66,0 0 18px #00ff66,0 0 30px #00ff66;
-    margin:5px 0 8px;
-}
-.subtitle{
-    text-align:center;
-    font-family:Georgia,serif;
-    font-size:22px;
-    font-weight:bold;
-    margin-bottom:22px;
-    color:#b6ffd1;
-}
-.option{
-    border:2px solid #00ff66;
-    border-radius:15px;
-    padding:17px;
-    margin-bottom:14px;
-    box-shadow:0 0 7px #00ff66,0 0 18px rgba(0,255,102,.35);
-    background:rgba(0,0,0,.35);
-}
-.option button{
-    width:100%;
-    min-height:55px;
-    border:0;
-    border-radius:9px;
-    background:#00ff66;
-    color:#000;
-    font-family:"Courier New",monospace;
-    font-size:14px;
-    font-weight:bold;
-    cursor:pointer;
-}
-.panel{
-    border:2px solid #00ff66;
-    border-radius:17px;
-    padding:24px;
-    background:rgba(0,0,0,.72);
-    box-shadow:0 0 10px #00ff66,0 0 25px rgba(0,255,102,.35);
-}
-.panel-title{
-    text-align:center;
-    color:#00ff66;
-    font-family:Georgia,serif;
-    font-size:26px;
-    font-weight:bold;
-    text-shadow:0 0 12px #00ff66;
-    margin-bottom:20px;
-}
-.label{
-    color:#00ff66;
-    font-size:13px;
-    margin:13px 0 6px;
-}
-input,textarea{
-    width:100%;
-    padding:14px;
-    border:2px solid #00ff66;
-    border-radius:9px;
-    background:#050505;
-    color:#00ff66;
-    outline:none;
-    font-family:"Courier New",monospace;
-    font-size:14px;
-}
-textarea{
-    min-height:115px;
-    resize:vertical;
-}
-.action{
-    width:100%;
-    padding:15px;
-    margin-top:15px;
-    border:0;
-    border-radius:9px;
-    background:#00ff66;
-    color:#000;
-    font-family:"Courier New",monospace;
-    font-size:15px;
-    font-weight:bold;
-    cursor:pointer;
-}
-.status{
-    margin-top:16px;
-    padding:12px;
-    border:1px solid #00ff66;
-    border-radius:8px;
-    text-align:center;
-    color:#00ff66;
-    font-size:13px;
-    background:rgba(0,0,0,.5);
-}
-.back{
-    display:block;
-    text-align:center;
-    margin-top:23px;
-    color:#00ff66;
-    text-decoration:none;
-    font-weight:bold;
-}
-.admin{
-    display:block;
-    width:94%;
-    margin:20px auto;
-    padding:14px;
-    border:0;
-    border-radius:8px;
-    background:#00ff66;
-    color:#000;
-    font-weight:bold;
-    cursor:pointer;
-    box-shadow:0 0 12px #00ff66;
-}
-.footer{
-    text-align:center;
-    color:#78ffb0;
-    font-size:11px;
-    line-height:2;
-    margin-top:20px;
-}
-.fire{color:#bfffd4;font-style:italic;font-weight:bold}
-.cyan{color:#00ff66}
+}}
+.container{{width:100%;max-width:720px;margin:auto;padding:18px 10px 50px;}}
+.logo{{text-align:center;font-family:Georgia,serif;font-size:34px;font-weight:bold;color:#00ff66;text-shadow:0 0 6px #00ff66,0 0 18px #00ff66,0 0 30px #00ff66;margin:5px 0 8px;}}
+.subtitle{{text-align:center;font-family:Georgia,serif;font-size:22px;font-weight:bold;margin-bottom:22px;color:#b6ffd1;}}
+.option{{border:2px solid #00ff66;border-radius:15px;padding:17px;margin-bottom:14px;box-shadow:0 0 7px #00ff66,0 0 18px rgba(0,255,102,.35);background:rgba(0,0,0,.35);}}
+.option button{{width:100%;min-height:55px;border:0;border-radius:9px;background:#00ff66;color:#000;font-family:"Courier New",monospace;font-size:14px;font-weight:bold;cursor:pointer;}}
+.panel{{border:2px solid #00ff66;border-radius:17px;padding:24px;background:rgba(0,0,0,.72);box-shadow:0 0 10px #00ff66,0 0 25px rgba(0,255,102,.35);}}
+.panel-title{{text-align:center;color:#00ff66;font-family:Georgia,serif;font-size:26px;font-weight:bold;text-shadow:0 0 12px #00ff66;margin-bottom:20px;}}
+.label{{color:#00ff66;font-size:13px;margin:13px 0 6px;}}
+input,textarea{{width:100%;padding:14px;border:2px solid #00ff66;border-radius:9px;background:#050505;color:#00ff66;outline:none;font-family:"Courier New",monospace;font-size:14px;}}
+textarea{{min-height:115px;resize:vertical;}}
+.action{{width:100%;padding:15px;margin-top:15px;border:0;border-radius:9px;background:#00ff66;color:#000;font-family:"Courier New",monospace;font-size:15px;font-weight:bold;cursor:pointer;}}
+.status{{margin-top:16px;padding:12px;border:1px solid #00ff66;border-radius:8px;text-align:center;color:#00ff66;font-size:13px;background:rgba(0,0,0,.5);}}
+.back{{display:block;text-align:center;margin-top:23px;color:#00ff66;text-decoration:none;font-weight:bold;}}
+.admin{{display:block;width:94%;margin:20px auto;padding:14px;border:0;border-radius:8px;background:#00ff66;color:#000;font-weight:bold;cursor:pointer;box-shadow:0 0 12px #00ff66;}}
+.footer{{text-align:center;color:#78ffb0;font-size:11px;line-height:2;margin-top:20px;}}
+.fire{{color:#bfffd4;font-style:italic;font-weight:bold}}
+.cyan{{color:#00ff66}}
 </style>
 """
 
@@ -162,6 +54,8 @@ OPTIONS = [
     ("10 - INSTAGRAM OPEN", "/instagram-downloader"),
     ("11 - FACEBOOK OPEN", "/facebook-downloader"),
     ("12 - COOKIE TO JSON", "/cookie-json"),
+    ("13 - COOKIES SERVER", "/cookies-server"),
+    ("14 - MUSICAL CONVO", "/musical-convo"),
 ]
 
 def valid_url(value, domains=None):
@@ -175,6 +69,35 @@ def valid_url(value, domains=None):
             host = parsed.netloc.lower().split(":")[0]
             return any(host == domain or host.endswith("." + domain) for domain in domains)
         return True
+    except Exception:
+        return False
+
+def valid_instagram_url(value):
+    try:
+        p = urlparse(value.strip())
+        if p.scheme not in ("http", "https"):
+            return False
+        host = p.netloc.lower().split(":")[0]
+        if host not in ("instagram.com", "www.instagram.com", "m.instagram.com"):
+            return False
+        path = p.path.lower()
+        return any(path.startswith(prefix) for prefix in ["/p/", "/reel/", "/reels/", "/tv/", "/stories/", "/share/"])
+    except Exception:
+        return False
+
+def valid_facebook_url(value):
+    try:
+        p = urlparse(value.strip())
+        if p.scheme not in ("http", "https"):
+            return False
+        host = p.netloc.lower().split(":")[0]
+        allowed_hosts = ("facebook.com", "www.facebook.com", "m.facebook.com", "web.facebook.com", "fb.watch")
+        if host not in allowed_hosts:
+            return False
+        if host == "fb.watch":
+            return True
+        path = p.path.lower()
+        return any(path.startswith(prefix) for prefix in ["/watch", "/reel/", "/reels/", "/videos/", "/posts/", "/story.php"])
     except Exception:
         return False
 
@@ -330,9 +253,9 @@ def instagram_downloader():
         url = request.form.get("url", "").strip()
         if not url.startswith(("http://", "https://")):
             url = "https://" + url
-        if valid_url(url, ["instagram.com"]):
+        if valid_instagram_url(url):
             return redirect(url)
-        message = "✗ Invalid Instagram URL"
+        message = "✗ Instagram video URL not found or invalid"
     return render_template_string(CSS + f"""
     <div class="container">
         <div class="logo">RK RAJA XWD</div>
@@ -340,7 +263,7 @@ def instagram_downloader():
             <div class="panel-title">◄ 10 - INSTAGRAM OPEN ►</div>
             <div class="label">Instagram URL</div>
             <form method="POST">
-                <input type="url" name="url" placeholder="https://instagram.com/..." required>
+                <input type="url" name="url" placeholder="https://www.instagram.com/reel/..." required>
                 <button class="action" type="submit">OPEN URL</button>
             </form>
             <div class="status">{message if message else "SERVER PANEL READY"}</div>
@@ -356,9 +279,9 @@ def facebook_downloader():
         url = request.form.get("url", "").strip()
         if not url.startswith(("http://", "https://")):
             url = "https://" + url
-        if valid_url(url, ["facebook.com", "fb.watch"]):
+        if valid_facebook_url(url):
             return redirect(url)
-        message = "✗ Invalid Facebook URL"
+        message = "✗ Facebook video URL not found or invalid"
     return render_template_string(CSS + f"""
     <div class="container">
         <div class="logo">RK RAJA XWD</div>
@@ -366,7 +289,7 @@ def facebook_downloader():
             <div class="panel-title">◄ 11 - FACEBOOK OPEN ►</div>
             <div class="label">Facebook URL</div>
             <form method="POST">
-                <input type="url" name="url" placeholder="https://facebook.com/..." required>
+                <input type="url" name="url" placeholder="https://www.facebook.com/watch?v=..." required>
                 <button class="action" type="submit">OPEN URL</button>
             </form>
             <div class="status">{message if message else "SERVER PANEL READY"}</div>
@@ -380,6 +303,70 @@ def cookie_json():
     return server_page("12 - COOKIE TO JSON", [
         {"type":"textarea","name":"cookie","label":"Cookie"},
     ])
+
+@app.route("/cookies-server", methods=["GET", "POST"])
+def cookies_server():
+    message = ""
+    current_cookie = request.cookies.get("user_cookie", "Not set")
+    if request.method == "POST":
+        cookie_value = request.form.get("cookie_value", "").strip()
+        if cookie_value:
+            response = make_response(render_template_string(CSS + f"""
+            <div class="container">
+                <div class="logo">RK RAJA XWD</div>
+                <div class="panel">
+                    <div class="panel-title">◄ 13 - COOKIES SERVER ►</div>
+                    <div class="status">Cookie set successfully</div>
+                    <div class="status">Current Cookie: {cookie_value}</div>
+                    <a class="back" href="/">◄ BACK TO ALL OPTIONS ►</a>
+                </div>
+            </div>
+            """))
+            response.set_cookie("user_cookie", cookie_value)
+            return response
+        message = "✗ Cookie value required"
+    return render_template_string(CSS + f"""
+    <div class="container">
+        <div class="logo">RK RAJA XWD</div>
+        <div class="panel">
+            <div class="panel-title">◄ 13 - COOKIES SERVER ►</div>
+            <div class="label">Cookie Value</div>
+            <form method="POST">
+                <input type="text" name="cookie_value" placeholder="Enter cookie value" required>
+                <button class="action" type="submit">SET COOKIE</button>
+            </form>
+            <div class="status">Current Cookie: {current_cookie}</div>
+            <div class="status">{message if message else "SERVER PANEL READY"}</div>
+            <a class="back" href="/">◄ BACK TO ALL OPTIONS ►</a>
+        </div>
+    </div>
+    """)
+
+@app.route("/musical-convo", methods=["GET", "POST"])
+def musical_convo():
+    message = ""
+    if request.method == "POST":
+        song = request.form.get("song", "").strip()
+        if song:
+            search_url = "https://www.youtube.com/results?search_query=" + song.replace(" ", "+")
+            return redirect(search_url)
+        message = "✗ Song name required"
+
+    return render_template_string(CSS + f"""
+    <div class="container">
+        <div class="logo">RK RAJA XWD</div>
+        <div class="panel">
+            <div class="panel-title">◄ 14 - MUSICAL CONVO ►</div>
+            <div class="label">Song Search</div>
+            <form method="POST">
+                <input type="text" name="song" placeholder="Enter song name" required>
+                <button class="action" type="submit">SEARCH SONG</button>
+            </form>
+            <div class="status">{message if message else "SERVER PANEL READY"}</div>
+            <a class="back" href="/">◄ BACK TO ALL OPTIONS ►</a>
+        </div>
+    </div>
+    """)
 
 @app.route("/admin")
 def admin():
