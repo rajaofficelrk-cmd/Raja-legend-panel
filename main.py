@@ -1,317 +1,225 @@
 import os
-from flask import Flask, render_template_string
+from urllib.parse import urlparse
+
+from flask import Flask, request, render_template_string, jsonify
 
 app = Flask(__name__)
 
-# ============================================================
-# STYLE
-# ============================================================
+# =========================================================
+# CSS
+# =========================================================
 
 CSS = """
 <style>
-* {
-    box-sizing: border-box;
+*{box-sizing:border-box}
+
+body{
+    margin:0;
+    background:#000;
+    color:#fff;
+    font-family:"Courier New",monospace;
 }
 
-html {
-    scroll-behavior: smooth;
+.container{
+    width:100%;
+    max-width:680px;
+    margin:auto;
+    padding:18px 10px 50px;
 }
 
-body {
-    margin: 0;
-    background: #000;
-    color: #fff;
-    font-family: "Courier New", monospace;
-}
-
-.container {
-    width: 100%;
-    max-width: 680px;
-    margin: auto;
-    padding: 20px 10px 50px;
-}
-
-/* ================= TITLE ================= */
-
-.logo {
-    text-align: center;
-    font-family: Georgia, serif;
-    font-size: 34px;
-    font-weight: bold;
-    color: #ff00ff;
-
+.logo{
+    text-align:center;
+    font-family:Georgia,serif;
+    font-size:34px;
+    font-weight:bold;
+    color:#ff00ff;
     text-shadow:
-        0 0 5px #ff00ff,
-        0 0 15px #ff00ff,
+        0 0 6px #ff00ff,
+        0 0 18px #ff00ff,
         0 0 30px #ff00ff;
-
-    margin: 5px 0 8px;
+    margin:5px 0 8px;
 }
 
-.subtitle {
-    text-align: center;
-    font-family: Georgia, serif;
-    font-size: 22px;
-    font-weight: bold;
-    margin-bottom: 25px;
+.subtitle{
+    text-align:center;
+    font-family:Georgia,serif;
+    font-size:22px;
+    font-weight:bold;
+    margin-bottom:22px;
 }
 
-/* ================= HOME BUTTON ================= */
-
-.option {
-    border: 2px solid #00ffff;
-    border-radius: 15px;
-    padding: 18px;
-    margin-bottom: 14px;
-
+.option{
+    border:2px solid #00ffff;
+    border-radius:15px;
+    padding:17px;
+    margin-bottom:14px;
     box-shadow:
         0 0 7px #00ffff,
-        0 0 18px rgba(0,255,255,.55);
-
-    background: #010101;
+        0 0 18px rgba(0,255,255,.5);
 }
 
-.option button {
-    width: 100%;
-    min-height: 55px;
-
-    border: 0;
-    border-radius: 9px;
-
-    background: #08e8e8;
-    color: #000;
-
-    font-family: "Courier New", monospace;
-    font-size: 15px;
-    font-weight: bold;
-
-    cursor: pointer;
-
-    transition: .2s;
+.option button{
+    width:100%;
+    min-height:55px;
+    border:0;
+    border-radius:9px;
+    background:#08e8e8;
+    color:#000;
+    font-family:"Courier New",monospace;
+    font-size:14px;
+    font-weight:bold;
+    cursor:pointer;
 }
 
-.option button:hover {
-    transform: scale(1.015);
+.option button:hover{
+    transform:scale(1.01);
+    box-shadow:0 0 15px #00ffff;
+}
 
+.panel{
+    border:2px solid #00ffff;
+    border-radius:17px;
+    padding:24px;
+    background:#010101;
     box-shadow:
         0 0 10px #00ffff,
-        0 0 22px #00ffff;
+        0 0 25px rgba(0,255,255,.5);
 }
 
-/* ================= INNER PAGE ================= */
-
-.panel {
-    border: 2px solid #00ffff;
-    border-radius: 17px;
-
-    padding: 25px;
-
-    box-shadow:
-        0 0 10px #00ffff,
-        0 0 25px rgba(0,255,255,.55);
-
-    background: #010101;
+.panel-title{
+    text-align:center;
+    color:#ff00ff;
+    font-family:Georgia,serif;
+    font-size:26px;
+    font-weight:bold;
+    text-shadow:0 0 12px #ff00ff;
+    margin-bottom:20px;
 }
 
-.panel-title {
-    text-align: center;
-
-    color: #ff00ff;
-
-    font-family: Georgia, serif;
-    font-size: 27px;
-    font-weight: bold;
-
-    text-shadow:
-        0 0 7px #ff00ff,
-        0 0 18px #ff00ff;
-
-    margin-bottom: 25px;
+.label{
+    color:#00ffff;
+    font-size:13px;
+    margin:13px 0 6px;
 }
 
-.line {
-    height: 2px;
-    background: #00ffff;
-    box-shadow: 0 0 8px #00ffff;
-    margin: 18px 0;
+input,textarea{
+    width:100%;
+    padding:14px;
+    border:2px solid #00ffff;
+    border-radius:9px;
+    background:#050505;
+    color:#fff;
+    outline:none;
+    font-family:"Courier New",monospace;
+    font-size:14px;
 }
 
-.label {
-    color: #00ffff;
-    font-size: 14px;
-    margin: 12px 0 5px;
+textarea{
+    min-height:115px;
+    resize:vertical;
 }
 
-input,
-textarea,
-select {
-    width: 100%;
-
-    padding: 14px;
-    margin-bottom: 8px;
-
-    background: #050505;
-    color: #fff;
-
-    border: 2px solid #00ffff;
-    border-radius: 9px;
-
-    outline: none;
-
-    font-family: "Courier New", monospace;
-    font-size: 14px;
+.action{
+    width:100%;
+    padding:15px;
+    margin-top:15px;
+    border:0;
+    border-radius:9px;
+    background:#08e8e8;
+    color:#000;
+    font-family:"Courier New",monospace;
+    font-size:15px;
+    font-weight:bold;
+    cursor:pointer;
 }
 
-textarea {
-    min-height: 130px;
-    resize: vertical;
+.action:hover{
+    box-shadow:0 0 12px #00ffff;
 }
 
-.action {
-    width: 100%;
-
-    margin-top: 12px;
-    padding: 15px;
-
-    border: 0;
-    border-radius: 9px;
-
-    background: #08e8e8;
-    color: #000;
-
-    font-family: "Courier New", monospace;
-    font-size: 15px;
-    font-weight: bold;
-
-    cursor: pointer;
+.status{
+    margin-top:16px;
+    padding:12px;
+    border:1px solid #00ffff;
+    border-radius:8px;
+    text-align:center;
+    color:#00ffff;
+    font-size:13px;
 }
 
-.action:hover {
-    box-shadow:
-        0 0 10px #00ffff,
-        0 0 20px #00ffff;
+.back{
+    display:block;
+    text-align:center;
+    margin-top:23px;
+    color:#00ffff;
+    text-decoration:none;
+    font-weight:bold;
 }
 
-.status {
-    text-align: center;
-
-    margin-top: 18px;
-    padding: 13px;
-
-    border: 1px solid #00ffff;
-    border-radius: 9px;
-
-    color: #00ffff;
-
-    font-size: 13px;
+.admin{
+    display:block;
+    width:94%;
+    margin:20px auto;
+    padding:14px;
+    border:0;
+    border-radius:8px;
+    background:#ff00ff;
+    color:#000;
+    font-weight:bold;
+    cursor:pointer;
+    box-shadow:0 0 12px #ff00ff;
 }
 
-.back {
-    display: block;
-
-    text-align: center;
-
-    margin-top: 25px;
-
-    color: #00ffff;
-    text-decoration: none;
-
-    font-weight: bold;
+.footer{
+    text-align:center;
+    color:#777;
+    font-size:11px;
+    line-height:2;
+    margin-top:20px;
 }
 
-.back:hover {
-    text-shadow: 0 0 10px #00ffff;
+.fire{
+    color:#999;
+    font-style:italic;
+    font-weight:bold;
 }
 
-/* ================= ADMIN ================= */
-
-.admin {
-    width: 94%;
-
-    display: block;
-    margin: 20px auto;
-
-    padding: 14px;
-
-    border: 0;
-    border-radius: 8px;
-
-    background: #ff00ff;
-    color: #000;
-
-    font-family: "Courier New", monospace;
-    font-weight: bold;
-
-    cursor: pointer;
-
-    box-shadow:
-        0 0 8px #ff00ff,
-        0 0 18px rgba(255,0,255,.6);
+.cyan{
+    color:#00ffff;
 }
 
-/* ================= FOOTER ================= */
-
-.footer {
-    text-align: center;
-
-    margin-top: 25px;
-
-    color: #777;
-
-    font-size: 11px;
-
-    line-height: 2;
-}
-
-.fire {
-    color: #999;
-    font-style: italic;
-    font-weight: bold;
-}
-
-.messenger {
-    color: #00ffff;
-}
-
-/* ================= MOBILE ================= */
-
-@media (max-width: 500px) {
-
-    .container {
-        padding: 16px 9px 45px;
+@media(max-width:500px){
+    .container{
+        padding:15px 9px 40px;
     }
 
-    .logo {
-        font-size: 30px;
+    .logo{
+        font-size:30px;
     }
 
-    .subtitle {
-        font-size: 21px;
+    .subtitle{
+        font-size:21px;
     }
 
-    .option {
-        padding: 17px;
+    .option{
+        padding:16px;
     }
 
-    .option button {
-        font-size: 13px;
+    .option button{
+        font-size:13px;
     }
 
-    .panel {
-        padding: 21px;
-    }
-
-    .panel-title {
-        font-size: 24px;
+    .panel{
+        padding:20px;
     }
 }
 </style>
 """
 
 
-# ============================================================
-# ALL OPTIONS
-# ============================================================
+# =========================================================
+# OPTIONS
+# =========================================================
 
 OPTIONS = [
     ("1 - CONVO SERVER", "/convo-server"),
@@ -329,9 +237,37 @@ OPTIONS = [
 ]
 
 
-# ============================================================
-# HOME PAGE
-# ============================================================
+# =========================================================
+# URL VALIDATION
+# =========================================================
+
+def valid_url(value, domains=None):
+    try:
+        parsed = urlparse(value.strip())
+
+        if parsed.scheme not in ("http", "https"):
+            return False
+
+        if not parsed.netloc:
+            return False
+
+        if domains:
+            host = parsed.netloc.lower().split(":")[0]
+
+            return any(
+                host == domain or host.endswith("." + domain)
+                for domain in domains
+            )
+
+        return True
+
+    except Exception:
+        return False
+
+
+# =========================================================
+# HOME
+# =========================================================
 
 @app.route("/")
 def home():
@@ -342,11 +278,9 @@ def home():
 
         buttons += f"""
         <div class="option">
-
             <button onclick="location.href='{url}'">
                 ◄ {name} ►
             </button>
-
         </div>
         """
 
@@ -366,27 +300,15 @@ def home():
 
             <button class="admin"
                     onclick="location.href='/admin'">
-
                 ⚙ ADMIN PANEL
-
             </button>
 
             <div class="footer">
-
                 © 2026 MADE BY :- RK RAJA XWD PANEL
-
                 <br>
-
-                <span class="fire">
-                    ALWAYS ON FIRE 🔥
-                </span>
-
+                <span class="fire">ALWAYS ON FIRE 🔥</span>
                 <br>
-
-                <span class="messenger">
-                    Chat on Messenger
-                </span>
-
+                <span class="cyan">SERVER ONLINE ✓</span>
             </div>
 
         </div>
@@ -394,38 +316,42 @@ def home():
     )
 
 
-# ============================================================
-# PAGE GENERATOR
-# ============================================================
+# =========================================================
+# GENERIC SERVER PAGE
+# =========================================================
 
-def create_page(title, description, fields):
+def server_page(title, fields):
 
-    field_html = ""
+    html = ""
 
-    for field_type, placeholder in fields:
+    for field in fields:
 
-        if field_type == "textarea":
+        kind = field["type"]
+        label = field["label"]
+        name = field["name"]
 
-            field_html += f"""
-            <div class="label">
-                {placeholder}
-            </div>
+        if kind == "textarea":
+
+            html += f"""
+            <div class="label">{label}</div>
 
             <textarea
-                placeholder="Enter {placeholder.lower()}">
+                id="{name}"
+                name="{name}"
+                placeholder="{label}">
             </textarea>
             """
 
         else:
 
-            field_html += f"""
-            <div class="label">
-                {placeholder}
-            </div>
+            html += f"""
+            <div class="label">{label}</div>
 
             <input
-                type="{field_type}"
-                placeholder="Enter {placeholder.lower()}">
+                type="{kind}"
+                id="{name}"
+                name="{name}"
+                placeholder="{label}">
             """
 
     return render_template_string(
@@ -442,31 +368,18 @@ def create_page(title, description, fields):
                     ◄ {title} ►
                 </div>
 
-                <div class="line"></div>
-
-                <div style="
-                    text-align:center;
-                    color:#aaa;
-                    font-size:13px;
-                    margin-bottom:18px;
-                ">
-                    {description}
-                </div>
-
-                {field_html}
+                {html}
 
                 <button class="action"
-                        onclick="openServer()">
-
+                        onclick="openPanel()">
                     OPEN SERVER
-
                 </button>
 
                 <div id="status" class="status">
                     SERVER PANEL READY
                 </div>
 
-                <a href="/" class="back">
+                <a class="back" href="/">
                     ◄ BACK TO ALL OPTIONS ►
                 </a>
 
@@ -475,240 +388,394 @@ def create_page(title, description, fields):
         </div>
 
         <script>
-
-        function openServer() {{
-
-            document.getElementById("status").innerHTML =
+        function openPanel(){{
+            document.getElementById("status").innerText =
                 "✓ {title} SERVER OPEN";
-
         }}
-
         </script>
         """
     )
 
 
-# ============================================================
-# 1 - CONVO SERVER
-# ============================================================
+# =========================================================
+# 1 CONVO
+# =========================================================
 
 @app.route("/convo-server")
 def convo_server():
 
-    return create_page(
+    return server_page(
         "1 - CONVO SERVER",
-        "CONVO SERVER PANEL",
         [
-            ("text", "Conversation ID"),
-            ("text", "Name"),
-            ("number", "Delay"),
-            ("textarea", "Message")
+            {"type":"text","name":"conversation_id","label":"Conversation ID"},
+            {"type":"text","name":"token","label":"Token"},
+            {"type":"text","name":"name","label":"Name"},
+            {"type":"number","name":"delay","label":"Delay"},
+            {"type":"textarea","name":"message","label":"Message"}
         ]
     )
 
 
-# ============================================================
-# 2 - BACKUP CONVO
-# ============================================================
+# =========================================================
+# 2 BACKUP CONVO
+# =========================================================
 
 @app.route("/backup-convo")
 def backup_convo():
 
-    return create_page(
+    return server_page(
         "2 - BACKUP CONVO",
-        "BACKUP CONVO PANEL",
         [
-            ("text", "Conversation ID"),
-            ("text", "Backup Name"),
-            ("textarea", "Backup Data")
+            {"type":"text","name":"conversation_id","label":"Conversation ID"},
+            {"type":"text","name":"token","label":"Token"},
+            {"type":"text","name":"backup_name","label":"Backup Name"},
+            {"type":"textarea","name":"backup_data","label":"Backup Data"}
         ]
     )
 
 
-# ============================================================
-# 3 - POST SERVER
-# ============================================================
+# =========================================================
+# 3 POST SERVER
+# =========================================================
 
 @app.route("/post-server")
 def post_server():
 
-    return create_page(
+    return server_page(
         "3 - POST SERVER",
-        "POST SERVER PANEL",
         [
-            ("text", "Post ID"),
-            ("text", "Token"),
-            ("textarea", "Post Message")
+            {"type":"text","name":"post_id","label":"Post ID"},
+            {"type":"text","name":"token","label":"Token"},
+            {"type":"textarea","name":"message","label":"Post Message"}
         ]
     )
 
 
-# ============================================================
-# 4 - BACKUP POST SERVER
-# ============================================================
+# =========================================================
+# 4 BACKUP POST
+# =========================================================
 
 @app.route("/backup-post")
 def backup_post():
 
-    return create_page(
+    return server_page(
         "4 - BACKUP POST SERVER",
-        "BACKUP POST SERVER PANEL",
         [
-            ("text", "Post ID"),
-            ("text", "Backup Name"),
-            ("textarea", "Backup Data")
+            {"type":"text","name":"post_id","label":"Post ID"},
+            {"type":"text","name":"token","label":"Token"},
+            {"type":"text","name":"backup_name","label":"Backup Name"},
+            {"type":"textarea","name":"backup_data","label":"Backup Data"}
         ]
     )
 
 
-# ============================================================
-# 5 - TOKEN CHECK VALIDITY
-# ============================================================
+# =========================================================
+# 5 TOKEN VALIDITY
+# =========================================================
 
 @app.route("/token-validity")
 def token_validity():
 
-    return create_page(
+    return server_page(
         "5 - TOKEN CHECK VALIDITY",
-        "TOKEN VALIDITY PANEL",
         [
-            ("textarea", "Token")
+            {"type":"textarea","name":"token","label":"Token"}
         ]
     )
 
 
-# ============================================================
-# 6 - FETCH ALL UID WITH TOKEN
-# ============================================================
+# =========================================================
+# 6 FETCH UID
+# =========================================================
 
 @app.route("/fetch-uid")
 def fetch_uid():
 
-    return create_page(
+    return server_page(
         "6 - FETCH ALL UID WITH TOKEN",
-        "UID FETCH PANEL",
         [
-            ("textarea", "Token")
+            {"type":"textarea","name":"token","label":"Token"}
         ]
     )
 
 
-# ============================================================
-# 7 - FETCH PAGE TOKENS
-# ============================================================
+# =========================================================
+# 7 PAGE TOKENS
+# =========================================================
 
 @app.route("/page-tokens")
 def page_tokens():
 
-    return create_page(
+    return server_page(
         "7 - FETCH PAGE TOKENS",
-        "PAGE TOKEN PANEL",
         [
-            ("textarea", "Token")
+            {"type":"textarea","name":"token","label":"Token"}
         ]
     )
 
 
-# ============================================================
-# 8 - GROUP NAME LOCKER
-# ============================================================
+# =========================================================
+# 8 GROUP LOCKER
+# =========================================================
 
 @app.route("/group-locker")
 def group_locker():
 
-    return create_page(
+    return server_page(
         "8 - GROUP NAME LOCKER",
-        "GROUP NAME LOCKER PANEL",
         [
-            ("text", "Group ID"),
-            ("text", "Group Name")
+            {"type":"text","name":"group_id","label":"Group ID"},
+            {"type":"text","name":"token","label":"Token"},
+            {"type":"text","name":"group_name","label":"Group Name"}
         ]
     )
 
 
-# ============================================================
-# 9 - YOUTUBE DOWNLOADER
-# ============================================================
+# =========================================================
+# 9 YOUTUBE
+# =========================================================
 
-@app.route("/youtube-downloader")
+@app.route("/youtube-downloader", methods=["GET","POST"])
 def youtube_downloader():
 
-    return create_page(
-        "9 - YOUTUBE DOWNLOADER",
-        "YOUTUBE DOWNLOADER PANEL",
-        [
-            ("url", "YouTube URL")
-        ]
+    message = ""
+
+    if request.method == "POST":
+
+        url = request.form.get("url", "")
+
+        if valid_url(
+            url,
+            ["youtube.com", "youtu.be"]
+        ):
+            message = "✓ YouTube URL valid"
+        else:
+            message = "✗ Invalid YouTube URL"
+
+    return render_template_string(
+        CSS + f"""
+        <div class="container">
+
+            <div class="logo">RK RAJA XWD</div>
+
+            <div class="panel">
+
+                <div class="panel-title">
+                    ◄ 9 - YOUTUBE DOWNLOADER ►
+                </div>
+
+                <div class="label">
+                    YouTube URL
+                </div>
+
+                <form method="POST">
+
+                    <input
+                        type="url"
+                        name="url"
+                        placeholder="https://youtube.com/... "
+                        required>
+
+                    <button class="action">
+                        CHECK URL
+                    </button>
+
+                </form>
+
+                <div class="status">
+                    {message if message else "SERVER PANEL READY"}
+                </div>
+
+                <a class="back" href="/">
+                    ◄ BACK TO ALL OPTIONS ►
+                </a>
+
+            </div>
+
+        </div>
+        """
     )
 
 
-# ============================================================
-# 10 - INSTAGRAM DOWNLOADER
-# ============================================================
+# =========================================================
+# 10 INSTAGRAM
+# =========================================================
 
-@app.route("/instagram-downloader")
+@app.route("/instagram-downloader", methods=["GET","POST"])
 def instagram_downloader():
 
-    return create_page(
-        "10 - INSTAGRAM DOWNLOADER",
-        "INSTAGRAM DOWNLOADER PANEL",
-        [
-            ("url", "Instagram URL")
-        ]
+    message = ""
+
+    if request.method == "POST":
+
+        url = request.form.get("url", "")
+
+        if valid_url(
+            url,
+            ["instagram.com"]
+        ):
+            message = "✓ Instagram URL valid"
+        else:
+            message = "✗ Invalid Instagram URL"
+
+    return render_template_string(
+        CSS + f"""
+        <div class="container">
+
+            <div class="logo">RK RAJA XWD</div>
+
+            <div class="panel">
+
+                <div class="panel-title">
+                    ◄ 10 - INSTAGRAM DOWNLOADER ►
+                </div>
+
+                <div class="label">
+                    Instagram URL
+                </div>
+
+                <form method="POST">
+
+                    <input
+                        type="url"
+                        name="url"
+                        placeholder="https://instagram.com/..."
+                        required>
+
+                    <button class="action">
+                        CHECK URL
+                    </button>
+
+                </form>
+
+                <div class="status">
+                    {message if message else "SERVER PANEL READY"}
+                </div>
+
+                <a class="back" href="/">
+                    ◄ BACK TO ALL OPTIONS ►
+                </a>
+
+            </div>
+
+        </div>
+        """
     )
 
 
-# ============================================================
-# 11 - FACEBOOK DOWNLOADER
-# ============================================================
+# =========================================================
+# 11 FACEBOOK
+# =========================================================
 
-@app.route("/facebook-downloader")
+@app.route("/facebook-downloader", methods=["GET","POST"])
 def facebook_downloader():
 
-    return create_page(
-        "11 - FACEBOOK DOWNLOADER",
-        "FACEBOOK DOWNLOADER PANEL",
-        [
-            ("url", "Facebook URL")
-        ]
+    message = ""
+
+    if request.method == "POST":
+
+        url = request.form.get("url", "")
+
+        if valid_url(
+            url,
+            ["facebook.com", "fb.watch"]
+        ):
+            message = "✓ Facebook URL valid"
+        else:
+            message = "✗ Invalid Facebook URL"
+
+    return render_template_string(
+        CSS + f"""
+        <div class="container">
+
+            <div class="logo">RK RAJA XWD</div>
+
+            <div class="panel">
+
+                <div class="panel-title">
+                    ◄ 11 - FACEBOOK DOWNLOADER ►
+                </div>
+
+                <div class="label">
+                    Facebook URL
+                </div>
+
+                <form method="POST">
+
+                    <input
+                        type="url"
+                        name="url"
+                        placeholder="https://facebook.com/..."
+                        required>
+
+                    <button class="action">
+                        CHECK URL
+                    </button>
+
+                </form>
+
+                <div class="status">
+                    {message if message else "SERVER PANEL READY"}
+                </div>
+
+                <a class="back" href="/">
+                    ◄ BACK TO ALL OPTIONS ►
+                </a>
+
+            </div>
+
+        </div>
+        """
     )
 
 
-# ============================================================
-# 12 - COOKIE TO JSON
-# ============================================================
+# =========================================================
+# 12 COOKIE TO JSON
+# =========================================================
 
 @app.route("/cookie-json")
 def cookie_json():
 
-    return create_page(
+    return server_page(
         "12 - COOKIE TO JSON",
-        "COOKIE TO JSON PANEL",
         [
-            ("textarea", "Cookie")
+            {"type":"textarea","name":"cookie","label":"Cookie"}
         ]
     )
 
 
-# ============================================================
-# ADMIN PANEL
-# ============================================================
+# =========================================================
+# ADMIN
+# =========================================================
 
 @app.route("/admin")
 def admin():
 
-    return create_page(
+    return server_page(
         "ADMIN PANEL",
-        "RK RAJA XWD ADMIN PANEL",
         [
-            ("text", "Admin Name")
+            {"type":"text","name":"admin_name","label":"Admin Name"}
         ]
     )
 
 
-# ============================================================
+# =========================================================
+# API HEALTH
+# =========================================================
+
+@app.route("/health")
+def health():
+
+    return jsonify({
+        "status": "online",
+        "server": "RK RAJA XWD",
+        "message": "Server is running"
+    })
+
+
+# =========================================================
 # NO 404
-# ============================================================
+# =========================================================
 
 @app.errorhandler(404)
 def not_found(error):
@@ -724,15 +791,15 @@ def not_found(error):
             <div class="panel">
 
                 <div class="panel-title">
-                    SERVER PANEL
+                    SERVER ONLINE ✓
                 </div>
 
                 <div class="status">
-                    SERVER IS RUNNING ✓
+                    PANEL IS RUNNING
                 </div>
 
                 <a href="/" class="back">
-                    ◄ BACK TO ALL OPTIONS ►
+                    ◄ BACK TO HOME ►
                 </a>
 
             </div>
@@ -742,9 +809,9 @@ def not_found(error):
     ), 200
 
 
-# ============================================================
-# RUN
-# ============================================================
+# =========================================================
+# RENDER
+# =========================================================
 
 if __name__ == "__main__":
 
@@ -758,4 +825,4 @@ if __name__ == "__main__":
     app.run(
         host="0.0.0.0",
         port=port
-      )
+            )
