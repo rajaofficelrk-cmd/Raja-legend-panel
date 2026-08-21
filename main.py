@@ -1,45 +1,136 @@
 import os
-from urllib.parse import urlparse
+import json
+import secrets
+from datetime import datetime
+from urllib.parse import urlparse, quote_plus
 
-from flask import Flask, request, render_template_string, jsonify, redirect, make_response
+from flask import Flask, request, redirect, render_template_string, jsonify, session, url_for, make_response
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("SECRET_KEY", secrets.token_hex(32))
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "rkraja")
 
-CUTE_BG = "PASTE_CUTE_DP_IMAGE_URL_HERE"
+convo_backups = {}
+post_backups = {}
+tasks = {}
 
-CSS = f"""
+CSS = """
 <style>
-*{{box-sizing:border-box}}
-body{{
+*{box-sizing:border-box}
+body{
     margin:0;
+    min-height:100vh;
     background:
-        linear-gradient(rgba(0,0,0,.72), rgba(0,0,0,.72)),
-        url("{CUTE_BG}");
-    background-size:cover;
-    background-position:center;
-    background-attachment:fixed;
-    color:#00ff66;
-    font-family:"Courier New",monospace;
-}}
-.container{{width:100%;max-width:720px;margin:auto;padding:18px 10px 50px;}}
-.logo{{text-align:center;font-family:Georgia,serif;font-size:34px;font-weight:bold;color:#00ff66;text-shadow:0 0 6px #00ff66,0 0 18px #00ff66,0 0 30px #00ff66;margin:5px 0 8px;}}
-.subtitle{{text-align:center;font-family:Georgia,serif;font-size:22px;font-weight:bold;margin-bottom:22px;color:#b6ffd1;}}
-.option{{border:2px solid #00ff66;border-radius:15px;padding:17px;margin-bottom:14px;box-shadow:0 0 7px #00ff66,0 0 18px rgba(0,255,102,.35);background:rgba(0,0,0,.35);}}
-.option button{{width:100%;min-height:55px;border:0;border-radius:9px;background:#00ff66;color:#000;font-family:"Courier New",monospace;font-size:14px;font-weight:bold;cursor:pointer;}}
-.panel{{border:2px solid #00ff66;border-radius:17px;padding:24px;background:rgba(0,0,0,.72);box-shadow:0 0 10px #00ff66,0 0 25px rgba(0,255,102,.35);}}
-.panel-title{{text-align:center;color:#00ff66;font-family:Georgia,serif;font-size:26px;font-weight:bold;text-shadow:0 0 12px #00ff66;margin-bottom:20px;}}
-.label{{color:#00ff66;font-size:13px;margin:13px 0 6px;}}
-input,textarea{{width:100%;padding:14px;border:2px solid #00ff66;border-radius:9px;background:#050505;color:#00ff66;outline:none;font-family:"Courier New",monospace;font-size:14px;}}
-textarea{{min-height:115px;resize:vertical;}}
-.action{{width:100%;padding:15px;margin-top:15px;border:0;border-radius:9px;background:#00ff66;color:#000;font-family:"Courier New",monospace;font-size:15px;font-weight:bold;cursor:pointer;}}
-.status{{margin-top:16px;padding:12px;border:1px solid #00ff66;border-radius:8px;text-align:center;color:#00ff66;font-size:13px;background:rgba(0,0,0,.5);}}
-.back{{display:block;text-align:center;margin-top:23px;color:#00ff66;text-decoration:none;font-weight:bold;}}
-.admin{{display:block;width:94%;margin:20px auto;padding:14px;border:0;border-radius:8px;background:#00ff66;color:#000;font-weight:bold;cursor:pointer;box-shadow:0 0 12px #00ff66;}}
-.footer{{text-align:center;color:#78ffb0;font-size:11px;line-height:2;margin-top:20px;}}
-.fire{{color:#bfffd4;font-style:italic;font-weight:bold}}
-.cyan{{color:#00ff66}}
+      radial-gradient(circle at 20% 20%,rgba(0,255,140,.10),transparent 30%),
+      radial-gradient(circle at 80% 80%,rgba(0,180,255,.10),transparent 30%),
+      #030507;
+    color:#d9ffe9;
+    font-family:Consolas,"Courier New",monospace;
+}
+body:before{
+    content:"";
+    position:fixed;
+    inset:0;
+    pointer-events:none;
+    background:linear-gradient(rgba(0,255,120,.025) 1px,transparent 1px);
+    background-size:100% 4px;
+}
+.wrap{max-width:760px;margin:auto;padding:20px 12px 50px}
+.logo{
+    text-align:center;
+    font-size:32px;
+    font-weight:900;
+    color:#7cffb2;
+    text-shadow:0 0 8px #00ff66,0 0 25px #00ff66;
+    margin:10px 0;
+}
+.sub{text-align:center;color:#70dca0;margin-bottom:25px}
+.card{
+    background:rgba(3,10,8,.88);
+    border:1px solid #00ff66;
+    border-radius:16px;
+    padding:20px;
+    margin:14px 0;
+    box-shadow:0 0 12px rgba(0,255,102,.25);
+}
+.option button,.btn{
+    width:100%;
+    padding:14px;
+    border:1px solid #00ff66;
+    border-radius:10px;
+    background:#06150d;
+    color:#8affbd;
+    font-family:inherit;
+    font-weight:bold;
+    cursor:pointer;
+}
+.option button:hover,.btn:hover{
+    background:#00ff66;
+    color:#001b09;
+    box-shadow:0 0 18px #00ff66;
+}
+input,textarea,select{
+    width:100%;
+    padding:13px;
+    margin:7px 0 15px;
+    border:1px solid #00ff66;
+    border-radius:8px;
+    background:#020604;
+    color:#9dffc0;
+    outline:none;
+    font-family:inherit;
+}
+textarea{min-height:120px;resize:vertical}
+label{display:block;color:#76ffac;font-size:13px}
+.title{text-align:center;color:#7cffb2;font-size:23px;font-weight:bold}
+.status{
+    padding:12px;
+    margin-top:14px;
+    border:1px solid #167b45;
+    border-radius:8px;
+    background:#04150c;
+}
+.back{
+    display:block;
+    text-align:center;
+    color:#78ffae;
+    margin-top:20px;
+    text-decoration:none;
+}
+.small{font-size:12px;color:#76a88b}
+pre{
+    white-space:pre-wrap;
+    word-break:break-word;
+    color:#8affbd;
+}
 </style>
 """
+
+def page(title, body):
+    return render_template_string(
+        CSS + f"""
+        <div class="wrap">
+            <div class="logo">RK RAJA XWD</div>
+            <div class="card">
+                <div class="title">◄ {title} ►</div>
+                {body}
+            </div>
+            <a class="back" href="/">◄ BACK TO ALL OPTIONS ►</a>
+        </div>
+        """
+    )
+
+def valid_url(value):
+    try:
+        p = urlparse(value.strip())
+        return p.scheme in ("http", "https") and bool(p.netloc)
+    except Exception:
+        return False
+
+def open_url(url):
+    if not url.startswith(("http://", "https://")):
+        url = "https://" + url
+    return url if valid_url(url) else None
 
 OPTIONS = [
     ("1 - CONVO SERVER", "/convo-server"),
@@ -47,359 +138,352 @@ OPTIONS = [
     ("3 - POST SERVER", "/post-server"),
     ("4 - BACKUP POST SERVER", "/backup-post"),
     ("5 - TOKEN CHECK VALIDITY", "/token-validity"),
-    ("6 - FETCH ALL UID WITH TOKEN", "/fetch-uid"),
+    ("6 - FETCH UID WITH TOKEN", "/fetch-uid"),
     ("7 - FETCH PAGE TOKENS", "/page-tokens"),
-    ("8 - GROUP NAME LOCKER", "/group-locker"),
-    ("9 - YOUTUBE OPEN", "/youtube-downloader"),
-    ("10 - INSTAGRAM OPEN", "/instagram-downloader"),
-    ("11 - FACEBOOK OPEN", "/facebook-downloader"),
+    ("8 - GROUP MANAGEMENT", "/group-management"),
+    ("9 - YOUTUBE OPEN", "/youtube"),
+    ("10 - INSTAGRAM OPEN", "/instagram"),
+    ("11 - FACEBOOK OPEN", "/facebook"),
     ("12 - COOKIE TO JSON", "/cookie-json"),
     ("13 - COOKIES SERVER", "/cookies-server"),
     ("14 - MUSICAL CONVO", "/musical-convo"),
 ]
 
-def valid_url(value, domains=None):
-    try:
-        parsed = urlparse(value.strip())
-        if parsed.scheme not in ("http", "https"):
-            return False
-        if not parsed.netloc:
-            return False
-        if domains:
-            host = parsed.netloc.lower().split(":")[0]
-            return any(host == domain or host.endswith("." + domain) for domain in domains)
-        return True
-    except Exception:
-        return False
-
-def valid_instagram_url(value):
-    try:
-        p = urlparse(value.strip())
-        if p.scheme not in ("http", "https"):
-            return False
-        host = p.netloc.lower().split(":")[0]
-        if host not in ("instagram.com", "www.instagram.com", "m.instagram.com"):
-            return False
-        path = p.path.lower()
-        return any(path.startswith(prefix) for prefix in ["/p/", "/reel/", "/reels/", "/tv/", "/stories/", "/share/"])
-    except Exception:
-        return False
-
-def valid_facebook_url(value):
-    try:
-        p = urlparse(value.strip())
-        if p.scheme not in ("http", "https"):
-            return False
-        host = p.netloc.lower().split(":")[0]
-        allowed_hosts = ("facebook.com", "www.facebook.com", "m.facebook.com", "web.facebook.com", "fb.watch")
-        if host not in allowed_hosts:
-            return False
-        if host == "fb.watch":
-            return True
-        path = p.path.lower()
-        return any(path.startswith(prefix) for prefix in ["/watch", "/reel/", "/reels/", "/videos/", "/posts/", "/story.php"])
-    except Exception:
-        return False
-
 @app.route("/")
 def home():
     buttons = ""
-    for name, url in OPTIONS:
+    for name, route in OPTIONS:
         buttons += f"""
-        <div class="option">
-            <button type="button" onclick="location.href='{url}'">◄ {name} ►</button>
+        <div class="option card">
+            <button onclick="location.href='{route}'">◄ {name} ►</button>
         </div>
         """
-    return render_template_string(CSS + f"""
-    <div class="container">
-        <div class="logo">RK RAJA XWD</div>
-        <div class="subtitle">( ALL OPTION )</div>
-        {buttons}
-        <button class="admin" onclick="location.href='/admin'">⚙ ADMIN PANEL</button>
-        <div class="footer">
-            © 2026 MADE BY :- RK RAJA XWD PANEL<br>
-            <span class="fire">ALWAYS ON FIRE 🔥</span><br>
-            <span class="cyan">SERVER ONLINE ✓</span>
+    return render_template_string(
+        CSS + f"""
+        <div class="wrap">
+            <div class="logo">RK RAJA XWD</div>
+            <div class="sub">HACKER CONTROL PANEL</div>
+            {buttons}
+            <div class="card">
+                <button class="btn" onclick="location.href='/admin'">⚙ ADMIN PANEL</button>
+            </div>
+            <div class="status" style="text-align:center">SERVER ONLINE ✓</div>
         </div>
-    </div>
-    """)
+        """
+    )
 
-def server_page(title, fields):
-    html = ""
-    for field in fields:
-        kind = field["type"]
-        label = field["label"]
-        name = field["name"]
-        if kind == "textarea":
-            html += f"""
-            <div class="label">{label}</div>
-            <textarea id="{name}" name="{name}" placeholder="{label}"></textarea>
-            """
-        else:
-            html += f"""
-            <div class="label">{label}</div>
-            <input type="{kind}" id="{name}" name="{name}" placeholder="{label}">
-            """
-    return render_template_string(CSS + f"""
-    <div class="container">
-        <div class="logo">RK RAJA XWD</div>
-        <div class="panel">
-            <div class="panel-title">◄ {title} ►</div>
-            {html}
-            <button class="action" type="button" onclick="openPanel()">OPEN SERVER</button>
-            <div id="status" class="status">SERVER PANEL READY</div>
-            <a class="back" href="/">◄ BACK TO ALL OPTIONS ►</a>
-        </div>
-    </div>
-    <script>
-    function openPanel(){{
-        document.getElementById("status").innerText = "✓ {title} SERVER OPEN";
-    }}
-    </script>
-    """)
-
-@app.route("/convo-server")
+@app.route("/convo-server", methods=["GET", "POST"])
 def convo_server():
-    return server_page("1 - CONVO SERVER", [
-        {"type":"text","name":"conversation_id","label":"Conversation ID"},
-        {"type":"text","name":"token","label":"Token"},
-        {"type":"text","name":"name","label":"Name"},
-        {"type":"number","name":"delay","label":"Delay"},
-        {"type":"textarea","name":"message","label":"Message"},
-    ])
+    result = ""
+    if request.method == "POST":
+        conversation_id = request.form.get("conversation_id", "").strip()
+        token = request.form.get("token", "").strip()
+        name = request.form.get("name", "").strip()
+        delay = request.form.get("delay", "").strip()
+        message = request.form.get("message", "").strip()
+        if not conversation_id or not token or not message:
+            result = "✗ Conversation ID, token and message are required."
+        else:
+            task_id = secrets.token_hex(3).upper()
+            tasks[task_id] = {
+                "type": "convo",
+                "conversation_id": conversation_id,
+                "name": name,
+                "delay": delay,
+                "message": message,
+                "created": datetime.now().isoformat(),
+                "status": "READY"
+            }
+            result = f"✓ Request saved. Task ID: {task_id}"
+    return page("1 - CONVO SERVER", f"""
+    <form method="post">
+        <label>Conversation ID</label><input name="conversation_id" required>
+        <label>Authorized API Token</label><input type="password" name="token" required>
+        <label>Name</label><input name="name">
+        <label>Delay</label><input type="number" name="delay" min="1" value="5">
+        <label>Message</label><textarea name="message" required></textarea>
+        <button class="btn">SAVE REQUEST</button>
+    </form>
+    <div class="status">{result or "CONVO SERVER READY"}</div>
+    """)
 
-@app.route("/backup-convo")
+@app.route("/backup-convo", methods=["GET", "POST"])
 def backup_convo():
-    return server_page("2 - BACKUP CONVO", [
-        {"type":"text","name":"conversation_id","label":"Conversation ID"},
-        {"type":"text","name":"token","label":"Token"},
-        {"type":"text","name":"backup_name","label":"Backup Name"},
-        {"type":"textarea","name":"backup_data","label":"Backup Data"},
-    ])
+    result = ""
+    if request.method == "POST":
+        name = request.form.get("backup_name", "").strip()
+        data = request.form.get("backup_data", "")
+        if not name or not data:
+            result = "✗ Backup name and data required."
+        else:
+            convo_backups[name] = data
+            result = "✓ Conversation backup saved."
+    return page("2 - BACKUP CONVO", f"""
+    <form method="post">
+        <label>Backup Name</label><input name="backup_name" required>
+        <label>Backup Data</label><textarea name="backup_data" required></textarea>
+        <button class="btn">SAVE BACKUP</button>
+    </form>
+    <div class="status">{result or "BACKUP CONVO READY"}</div>
+    """)
 
-@app.route("/post-server")
+@app.route("/post-server", methods=["GET", "POST"])
 def post_server():
-    return server_page("3 - POST SERVER", [
-        {"type":"text","name":"post_id","label":"Post ID"},
-        {"type":"text","name":"token","label":"Token"},
-        {"type":"textarea","name":"message","label":"Post Message"},
-    ])
+    result = ""
+    if request.method == "POST":
+        post_id = request.form.get("post_id", "").strip()
+        token = request.form.get("token", "").strip()
+        message = request.form.get("message", "").strip()
+        if not post_id or not token or not message:
+            result = "✗ Post ID, token and message are required."
+        else:
+            task_id = secrets.token_hex(3).upper()
+            tasks[task_id] = {
+                "type": "post",
+                "post_id": post_id,
+                "message": message,
+                "created": datetime.now().isoformat(),
+                "status": "READY"
+            }
+            result = f"✓ Authorized request saved. Task ID: {task_id}"
+    return page("3 - POST SERVER", f"""
+    <form method="post">
+        <label>Post ID</label><input name="post_id" required>
+        <label>Authorized API Token</label><input type="password" name="token" required>
+        <label>Message</label><textarea name="message" required></textarea>
+        <button class="btn">SAVE REQUEST</button>
+    </form>
+    <div class="status">{result or "POST SERVER READY"}</div>
+    """)
 
-@app.route("/backup-post")
+@app.route("/backup-post", methods=["GET", "POST"])
 def backup_post():
-    return server_page("4 - BACKUP POST SERVER", [
-        {"type":"text","name":"post_id","label":"Post ID"},
-        {"type":"text","name":"token","label":"Token"},
-        {"type":"text","name":"backup_name","label":"Backup Name"},
-        {"type":"textarea","name":"backup_data","label":"Backup Data"},
-    ])
+    result = ""
+    if request.method == "POST":
+        name = request.form.get("backup_name", "").strip()
+        data = request.form.get("backup_data", "")
+        if not name or not data:
+            result = "✗ Backup name and data required."
+        else:
+            post_backups[name] = data
+            result = "✓ Post backup saved."
+    return page("4 - BACKUP POST SERVER", f"""
+    <form method="post">
+        <label>Backup Name</label><input name="backup_name" required>
+        <label>Backup Data</label><textarea name="backup_data" required></textarea>
+        <button class="btn">SAVE BACKUP</button>
+    </form>
+    <div class="status">{result or "BACKUP POST READY"}</div>
+    """)
 
-@app.route("/token-validity")
+@app.route("/token-validity", methods=["GET", "POST"])
 def token_validity():
-    return server_page("5 - TOKEN CHECK VALIDITY", [
-        {"type":"textarea","name":"token","label":"Token"},
-    ])
+    result = ""
+    if request.method == "POST":
+        token = request.form.get("token", "").strip()
+        result = "✓ Token received securely. No token value is displayed or stored." if token else "✗ Token required."
+    return page("5 - TOKEN CHECK VALIDITY", f"""
+    <form method="post">
+        <label>Token</label><textarea name="token" required></textarea>
+        <button class="btn">CHECK TOKEN</button>
+    </form>
+    <div class="status">{result or "TOKEN CHECK READY"}</div>
+    """)
 
-@app.route("/fetch-uid")
+@app.route("/fetch-uid", methods=["GET", "POST"])
 def fetch_uid():
-    return server_page("6 - FETCH ALL UID WITH TOKEN", [
-        {"type":"textarea","name":"token","label":"Token"},
-    ])
+    result = ""
+    if request.method == "POST":
+        token = request.form.get("token", "").strip()
+        result = "✓ Token received. UID lookup requires an authorized API/token." if token else "✗ Token required."
+    return page("6 - FETCH UID WITH TOKEN", f"""
+    <form method="post">
+        <label>Authorized Token</label><textarea name="token" required></textarea>
+        <button class="btn">LOOKUP</button>
+    </form>
+    <div class="status">{result or "UID LOOKUP READY"}</div>
+    """)
 
-@app.route("/page-tokens")
+@app.route("/page-tokens", methods=["GET", "POST"])
 def page_tokens():
-    return server_page("7 - FETCH PAGE TOKENS", [
-        {"type":"textarea","name":"token","label":"Token"},
-    ])
-
-@app.route("/group-locker")
-def group_locker():
-    return server_page("8 - GROUP NAME LOCKER", [
-        {"type":"text","name":"group_id","label":"Group ID"},
-        {"type":"text","name":"token","label":"Token"},
-        {"type":"text","name":"group_name","label":"Group Name"},
-    ])
-
-@app.route("/youtube-downloader", methods=["GET", "POST"])
-def youtube_downloader():
-    message = ""
+    result = ""
     if request.method == "POST":
-        url = request.form.get("url", "").strip()
-        if not url.startswith(("http://", "https://")):
-            url = "https://" + url
-        if valid_url(url, ["youtube.com", "youtu.be"]):
-            return redirect(url)
-        message = "✗ Invalid YouTube URL"
-    return render_template_string(CSS + f"""
-    <div class="container">
-        <div class="logo">RK RAJA XWD</div>
-        <div class="panel">
-            <div class="panel-title">◄ 9 - YOUTUBE OPEN ►</div>
-            <div class="label">YouTube URL</div>
-            <form method="POST">
-                <input type="url" name="url" placeholder="https://youtube.com/..." required>
-                <button class="action" type="submit">OPEN URL</button>
-            </form>
-            <div class="status">{message if message else "SERVER PANEL READY"}</div>
-            <a class="back" href="/">◄ BACK TO ALL OPTIONS ►</a>
-        </div>
-    </div>
+        token = request.form.get("token", "").strip()
+        result = "✓ Token received." if token else "✗ Token required."
+    return page("7 - FETCH PAGE TOKENS", f"""
+    <form method="post">
+        <label>Authorized Token</label><textarea name="token" required></textarea>
+        <button class="btn">CHECK</button>
+    </form>
+    <div class="status">{result or "PAGE TOKEN TOOL READY"}</div>
     """)
 
-@app.route("/instagram-downloader", methods=["GET", "POST"])
-def instagram_downloader():
-    message = ""
+@app.route("/group-management", methods=["GET", "POST"])
+def group_management():
+    result = ""
     if request.method == "POST":
-        url = request.form.get("url", "").strip()
-        if not url.startswith(("http://", "https://")):
-            url = "https://" + url
-        if valid_instagram_url(url):
-            return redirect(url)
-        message = "✗ Instagram video URL not found or invalid"
-    return render_template_string(CSS + f"""
-    <div class="container">
-        <div class="logo">RK RAJA XWD</div>
-        <div class="panel">
-            <div class="panel-title">◄ 10 - INSTAGRAM OPEN ►</div>
-            <div class="label">Instagram URL</div>
-            <form method="POST">
-                <input type="url" name="url" placeholder="https://www.instagram.com/reel/..." required>
-                <button class="action" type="submit">OPEN URL</button>
-            </form>
-            <div class="status">{message if message else "SERVER PANEL READY"}</div>
-            <a class="back" href="/">◄ BACK TO ALL OPTIONS ►</a>
-        </div>
-    </div>
+        group_id = request.form.get("group_id", "").strip()
+        name = request.form.get("group_name", "").strip()
+        result = "✓ Group management request prepared." if group_id and name else "✗ Group ID and name required."
+    return page("8 - GROUP MANAGEMENT", f"""
+    <form method="post">
+        <label>Group ID</label><input name="group_id" required>
+        <label>New Group Name</label><input name="group_name" required>
+        <button class="btn">SAVE</button>
+    </form>
+    <div class="status">{result or "GROUP MANAGEMENT READY"}</div>
     """)
 
-@app.route("/facebook-downloader", methods=["GET", "POST"])
-def facebook_downloader():
-    message = ""
+def url_page(title, label, placeholder, allowed=None):
     if request.method == "POST":
-        url = request.form.get("url", "").strip()
-        if not url.startswith(("http://", "https://")):
-            url = "https://" + url
-        if valid_facebook_url(url):
-            return redirect(url)
-        message = "✗ Facebook video URL not found or invalid"
-    return render_template_string(CSS + f"""
-    <div class="container">
-        <div class="logo">RK RAJA XWD</div>
-        <div class="panel">
-            <div class="panel-title">◄ 11 - FACEBOOK OPEN ►</div>
-            <div class="label">Facebook URL</div>
-            <form method="POST">
-                <input type="url" name="url" placeholder="https://www.facebook.com/watch?v=..." required>
-                <button class="action" type="submit">OPEN URL</button>
-            </form>
-            <div class="status">{message if message else "SERVER PANEL READY"}</div>
-            <a class="back" href="/">◄ BACK TO ALL OPTIONS ►</a>
-        </div>
-    </div>
+        value = request.form.get("url", "").strip()
+        target = open_url(value)
+        if target:
+            host = urlparse(target).netloc.lower()
+            if allowed and not (host in allowed or any(host.endswith("." + x) for x in allowed)):
+                target = None
+            if target:
+                return redirect(target)
+        message = "✗ Invalid URL"
+    else:
+        message = "SERVER PANEL READY"
+    return page(title, f"""
+    <form method="post">
+        <label>{label}</label>
+        <input type="url" name="url" placeholder="{placeholder}" required>
+        <button class="btn">OPEN URL</button>
+    </form>
+    <div class="status">{message}</div>
     """)
 
-@app.route("/cookie-json")
+@app.route("/youtube", methods=["GET", "POST"])
+def youtube():
+    return url_page("9 - YOUTUBE OPEN", "YouTube URL", "https://youtube.com/...", ["youtube.com", "www.youtube.com", "youtu.be"])
+
+@app.route("/instagram", methods=["GET", "POST"])
+def instagram():
+    return url_page("10 - INSTAGRAM OPEN", "Instagram URL", "https://instagram.com/...", ["instagram.com", "www.instagram.com"])
+
+@app.route("/facebook", methods=["GET", "POST"])
+def facebook():
+    return url_page("11 - FACEBOOK OPEN", "Facebook URL", "https://facebook.com/...", ["facebook.com", "www.facebook.com", "m.facebook.com", "fb.watch"])
+
+@app.route("/cookie-json", methods=["GET", "POST"])
 def cookie_json():
-    return server_page("12 - COOKIE TO JSON", [
-        {"type":"textarea","name":"cookie","label":"Cookie"},
-    ])
+    result = ""
+    if request.method == "POST":
+        cookie = request.form.get("cookie", "").strip()
+        if not cookie:
+            result = "✗ Cookie required."
+        else:
+            pairs = {}
+            for part in cookie.split(";"):
+                if "=" in part:
+                    key, value = part.strip().split("=", 1)
+                    pairs[key.strip()] = value.strip()
+            result = "<pre>" + json.dumps(pairs, indent=2) + "</pre>"
+    return page("12 - COOKIE TO JSON", f"""
+    <form method="post">
+        <label>Cookie String</label><textarea name="cookie" required></textarea>
+        <button class="btn">CONVERT</button>
+    </form>
+    <div class="status">{result or "COOKIE CONVERTER READY"}</div>
+    """)
 
 @app.route("/cookies-server", methods=["GET", "POST"])
 def cookies_server():
-    message = ""
-    current_cookie = request.cookies.get("user_cookie", "Not set")
+    result = ""
     if request.method == "POST":
-        cookie_value = request.form.get("cookie_value", "").strip()
-        if cookie_value:
-            response = make_response(render_template_string(CSS + f"""
-            <div class="container">
-                <div class="logo">RK RAJA XWD</div>
-                <div class="panel">
-                    <div class="panel-title">◄ 13 - COOKIES SERVER ►</div>
-                    <div class="status">Cookie set successfully</div>
-                    <div class="status">Current Cookie: {cookie_value}</div>
-                    <a class="back" href="/">◄ BACK TO ALL OPTIONS ►</a>
-                </div>
-            </div>
-            """))
-            response.set_cookie("user_cookie", cookie_value)
-            return response
-        message = "✗ Cookie value required"
-    return render_template_string(CSS + f"""
-    <div class="container">
-        <div class="logo">RK RAJA XWD</div>
-        <div class="panel">
-            <div class="panel-title">◄ 13 - COOKIES SERVER ►</div>
-            <div class="label">Cookie Value</div>
-            <form method="POST">
-                <input type="text" name="cookie_value" placeholder="Enter cookie value" required>
-                <button class="action" type="submit">SET COOKIE</button>
-            </form>
-            <div class="status">Current Cookie: {current_cookie}</div>
-            <div class="status">{message if message else "SERVER PANEL READY"}</div>
-            <a class="back" href="/">◄ BACK TO ALL OPTIONS ►</a>
-        </div>
-    </div>
+        value = request.form.get("cookie_value", "").strip()
+        if value:
+            resp = make_response(redirect(url_for("cookies_server")))
+            resp.set_cookie("panel_setting", value, httponly=True, samesite="Lax")
+            return resp
+        result = "✗ Value required."
+    current = request.cookies.get("panel_setting", "Not set")
+    return page("13 - COOKIES SERVER", f"""
+    <form method="post">
+        <label>Panel Cookie Setting</label><input name="cookie_value" required>
+        <button class="btn">SET COOKIE</button>
+    </form>
+    <div class="status">Current setting: {current}</div>
+    <div class="status">{result}</div>
     """)
 
 @app.route("/musical-convo", methods=["GET", "POST"])
 def musical_convo():
-    message = ""
     if request.method == "POST":
         song = request.form.get("song", "").strip()
         if song:
-            search_url = "https://www.youtube.com/results?search_query=" + song.replace(" ", "+")
-            return redirect(search_url)
-        message = "✗ Song name required"
-
-    return render_template_string(CSS + f"""
-    <div class="container">
-        <div class="logo">RK RAJA XWD</div>
-        <div class="panel">
-            <div class="panel-title">◄ 14 - MUSICAL CONVO ►</div>
-            <div class="label">Song Search</div>
-            <form method="POST">
-                <input type="text" name="song" placeholder="Enter song name" required>
-                <button class="action" type="submit">SEARCH SONG</button>
-            </form>
-            <div class="status">{message if message else "SERVER PANEL READY"}</div>
-            <a class="back" href="/">◄ BACK TO ALL OPTIONS ►</a>
-        </div>
-    </div>
+            return redirect("https://www.youtube.com/results?search_query=" + quote_plus(song))
+    return page("14 - MUSICAL CONVO", """
+    <form method="post">
+        <label>Song Name</label>
+        <input name="song" placeholder="Enter song name" required>
+        <button class="btn">SEARCH SONG</button>
+    </form>
+    <div class="status">MUSIC SEARCH READY</div>
     """)
 
-@app.route("/admin")
+@app.route("/admin", methods=["GET", "POST"])
 def admin():
-    return server_page("ADMIN PANEL", [
-        {"type":"text","name":"admin_name","label":"Admin Name"},
-    ])
+    if request.method == "POST":
+        password = request.form.get("password", "")
+        if secrets.compare_digest(password, ADMIN_PASSWORD):
+            session["admin"] = True
+            return redirect(url_for("admin_panel"))
+        return page("ADMIN LOGIN", "<div class='status'>✗ Wrong password</div>")
+    return page("ADMIN LOGIN", """
+    <form method="post">
+        <label>Admin Password</label>
+        <input type="password" name="password" required>
+        <button class="btn">LOGIN</button>
+    </form>
+    """)
 
-@app.route("/open-url", methods=["POST"])
-def open_url():
-    url = request.form.get("url", "").strip()
-    if not url.startswith(("http://", "https://")):
-        url = "https://" + url
-    if not valid_url(url):
-        return jsonify({"success": False, "error": "Invalid URL"}), 400
-    return redirect(url)
+@app.route("/admin/panel")
+def admin_panel():
+    if not session.get("admin"):
+        return redirect(url_for("admin"))
+    task_html = ""
+    for task_id, task in tasks.items():
+        task_html += f"""
+        <div class="card">
+            <b>Task:</b> {task_id}<br>
+            <b>Type:</b> {task.get("type")}<br>
+            <b>Status:</b> {task.get("status")}<br>
+            <b>Created:</b> {task.get("created")}
+        </div>
+        """
+    return page("ADMIN PANEL", f"""
+    <div class="status">
+        <b>SERVER:</b> ONLINE<br>
+        <b>Tasks:</b> {len(tasks)}<br>
+        <b>Convo Backups:</b> {len(convo_backups)}<br>
+        <b>Post Backups:</b> {len(post_backups)}
+    </div>
+    {task_html or '<div class="status">No tasks.</div>'}
+    <br>
+    <a class="back" href="{url_for('admin_logout')}">LOGOUT</a>
+    """)
+
+@app.route("/admin/logout")
+def admin_logout():
+    session.clear()
+    return redirect(url_for("home"))
 
 @app.route("/health")
 def health():
-    return jsonify({"status": "online", "server": "RK RAJA XWD", "message": "Server is running"})
+    return jsonify({"status": "online", "server": "RK RAJA XWD", "time": datetime.utcnow().isoformat() + "Z"})
+
+@app.route("/ping")
+def ping():
+    return "RK RAJA XWD ONLINE ✓", 200
 
 @app.errorhandler(404)
 def not_found(error):
-    return render_template_string(CSS + """
-    <div class="container">
-        <div class="logo">RK RAJA XWD</div>
-        <div class="panel">
-            <div class="panel-title">SERVER ONLINE ✓</div>
-            <div class="status">PANEL IS RUNNING</div>
-            <a href="/" class="back">◄ BACK TO HOME ►</a>
-        </div>
-    </div>
-    """), 200
+    return page("404", "<div class='status'>✗ Page not found.</div>"), 404
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    port = int(os.environ.get("PORT", "10000"))
+    app.run(host="0.0.0.0", port=port, debug=False)
